@@ -66,6 +66,8 @@ from pathlib import Path
 import itertools
 import string
 import warnings
+import pandas as pd
+import csv
 
 
 #################
@@ -134,7 +136,103 @@ for sample, label in SAMPLES_INFO.items():
     )
   SAMPLE_FIELDS[sample] = fields
 
-FIELD_NAMES = list(next(iter(SAMPLE_FIELDS.values())).keys())
+# --- Store original sample fields -----------------------------------
+
+ORIGINAL_FIELD_NAMES = list(
+    next(iter(SAMPLE_FIELDS.values())).keys()
+)
+
+# --- Add external sample metadata -----------------------------------
+
+SAMPLE_METADATA = config.get("sample_metadata")
+
+if SAMPLE_METADATA is not None:
+
+    # Read and validate TSV header
+    with open(
+        SAMPLE_METADATA, "r", newline="", encoding="utf-8-sig"
+    ) as metadata_file:
+        reader = csv.reader(metadata_file, delimiter="\t")
+        metadata_header = next(reader, [])
+
+    # Check that the sample ID column exists
+    if "sample_id" not in metadata_header:
+        raise ValueError(
+            "External sample metadata must contain a 'sample_id' column."
+        )
+
+    # Read external metadata
+    EXTRA_METADATA = pd.read_csv(
+        SAMPLE_METADATA,
+        sep="\t",
+        dtype=str,
+        keep_default_na=False,
+        encoding="utf-8-sig"
+    )
+
+    # Check for duplicated sample IDs
+    if EXTRA_METADATA["sample_id"].duplicated().any():
+        duplicated_samples = (
+            EXTRA_METADATA.loc[
+                EXTRA_METADATA["sample_id"].duplicated(keep=False), #keep=False marks all duplicates as True (even the first occurrence)
+                "sample_id"
+            ].unique().tolist() #Simplify the duplicated sample IDs to show unique values as a list to show in the error message
+        )
+        raise ValueError(
+            f"External metadata contains duplicated sample IDs: "
+            f"{duplicated_samples}."
+        )
+
+    # Get sample IDs from both sources
+    EXISTING_SAMPLES = set(SAMPLE_FIELDS.keys())
+    METADATA_SAMPLES = set(EXTRA_METADATA["sample_id"])
+
+    # Check that samples in external metadata match those defined in the current config['files'] section
+    missing_samples = EXISTING_SAMPLES - METADATA_SAMPLES
+    unknown_samples = METADATA_SAMPLES - EXISTING_SAMPLES
+    if missing_samples or unknown_samples:
+        raise ValueError(
+            "External metadata sample IDs do not match the samples "
+            "defined in config['files'].\n"
+            f"Missing samples: {sorted(missing_samples)}\n"
+            f"Unknown samples: {sorted(unknown_samples)}"
+        )
+
+    # Identify additional metadata columns
+    EXTRA_FIELD_NAMES = [
+        col for col in EXTRA_METADATA.columns
+        if col != "sample_id"
+    ]
+
+    # Check that additional fields do not already exist
+    duplicated_fields = (
+        set(EXTRA_FIELD_NAMES) & set(ORIGINAL_FIELD_NAMES)
+    )
+    if duplicated_fields:
+        raise ValueError(
+            f"External metadata contains field(s) already defined in "
+            f"`sample_label_pattern`: {sorted(duplicated_fields)}."
+        )
+
+    # Set sample_id as the DataFrame index
+    EXTRA_METADATA = EXTRA_METADATA.set_index("sample_id")
+
+    # Add external metadata to SAMPLE_FIELDS
+    for sample_id in SAMPLE_FIELDS:
+        for field_name in EXTRA_FIELD_NAMES:
+            SAMPLE_FIELDS[sample_id][field_name] = (
+                EXTRA_METADATA.at[sample_id, field_name]
+            )
+    print(
+        f"[Sample Metadata] Added {len(EXTRA_FIELD_NAMES)} "
+        f"external field(s): {EXTRA_FIELD_NAMES}"
+    )
+
+# --- Update field names ---------------------------------------------
+
+FIELD_NAMES = list(
+    next(iter(SAMPLE_FIELDS.values())).keys()
+)
 
 # --- Split condition and confounder fields --------------------------
 CONDITION_FIELD_NAMES = [

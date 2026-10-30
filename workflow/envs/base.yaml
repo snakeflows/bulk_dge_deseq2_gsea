@@ -52,3 +52,4 @@ channels:
 
 dependencies:
   - parse
+  - pandas
