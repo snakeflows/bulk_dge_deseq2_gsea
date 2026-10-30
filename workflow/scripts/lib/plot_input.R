@@ -9,7 +9,7 @@
 # File:     workflow/scripts/lib/plot_input.R
 # Author:   Marcel Schilling <mschilling@idibell.cat>
 # Created:  2026-09-21
-# Modified: 2026-10-20
+# Modified: 2026-10-30
 # License:  GNU Affero General Public License version 3 or later
 # Purpose:  Common MA/volcan plot input code helper R script for the bulk
 #           RNA-seq DGE (DESeq2 + GSEA) Snakemake workflow.
@@ -73,6 +73,7 @@ lfc_type <- snakemake@params[["lfc_type"]]
 padj_threshold <- snakemake@params[["padj_threshold"]]
 gene_label <- snakemake@params[["gene_label"]]
 genes_of_interest <- snakemake@params[["genes_of_interest"]]
+label_non_signif <- snakemake@params[["label_non_signif"]]
 color_up   <- snakemake@params[["color_up"]]
 color_down <- snakemake@params[["color_down"]]
 color_none <- snakemake@params[["color_none"]]
@@ -82,6 +83,7 @@ cat("LFC type:", lfc_type, "\n")
 cat("padj threshold:", padj_threshold, "\n")
 cat("Gene label:", gene_label, "\n")
 cat("Genes of interest:", genes_of_interest, "\n")
+cat("Label non-significant genes:", label_non_signif, "\n")
 cat("Colors -- up:", color_up, " down:", color_down, " none:", color_none, "\n\n")
 
 if (is.null(gene_annotation) != is.null(gene_label)) {
@@ -210,8 +212,9 @@ results_df <- results_df %>%
 results_df <- results_df %>%
   # Note: empty string rather than `NA` to ensure unlabeled points are
   #  considered for `ggrepel`'s repulsion.
-  mutate(label = ifelse(gene_id %in% genes_of_interest,
-                        .data[[gene_label]], ""))
+  mutate(label = ifelse((gene_id %in% genes_of_interest) & (
+                          label_non_signif | !(category %in% "Not Significant")
+                        ), .data[[gene_label]], ""))
 
 
 ##############

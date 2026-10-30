@@ -9,7 +9,7 @@
 # File:     workflow/Snakefile
 # Author:   Marcel Schilling <mschilling@idibell.cat>
 # Created:  2026-08-24
-# Modified: 2026-10-29
+# Modified: 2026-10-30
 # License:  GNU Affero General Public License version 3 or later
 # Purpose:  Main Snakefile for the bulk RNA-seq DGE (DESeq2 + GSEA)
 #           Snakemake workflow.
@@ -419,6 +419,7 @@ else:
           if "mid" in colour_or_color_config:
             pca_colour_setting["mid"] = colour_or_color_config["mid"]
 
+
 # --- Check if shape config exists for PCA plots -------
 
 if "shape" not in config["pca"]:
@@ -557,7 +558,8 @@ SHRINKABLE_CONTRASTS = [
   if contrast_is_shrinkable(spec)
 ]
 
-GENE_LABEL = config.get("gene_label", None)
+GENE_LABEL = config.get("gene_label", {}).get("field", None)
+GENE_LABEL_NON_SIGNIF = config.get("gene_label", {}).get("non_signif", True)
 GENES_OF_INTEREST = config.get("genes_of_interest", None)
 GSEA_NAMES = list(config["gsea"].keys())
 GO_GSEA_NAMES = [
@@ -876,6 +878,7 @@ rule plot_volcano:
     color_down = config["colors"]["direction"]["down"],
     color_none = config["colors"]["direction"]["none"],
     gene_label = GENE_LABEL,
+    label_non_signif = GENE_LABEL_NON_SIGNIF,
     genes_of_interest = GENES_OF_INTEREST,
   output:
     volcano =
@@ -903,6 +906,7 @@ rule plot_ma:
     color_down = rules.plot_volcano.params.color_down,
     color_none = rules.plot_volcano.params.color_none,
     gene_label = rules.plot_volcano.params.gene_label,
+    label_non_signif = rules.plot_volcano.params.label_non_signif,
     genes_of_interest = rules.plot_volcano.params.genes_of_interest,
   output:
     ma = f"{OUTPUT_DIR}/deseq2/{{contrast}}.{{confounder_handling}}.ma_plot_{{lfc_type}}.pdf"
